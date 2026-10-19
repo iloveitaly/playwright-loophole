@@ -1,0 +1,16 @@
+services:
+  chrome:
+    build:
+      context: .
+      args:
+        PLAYWRIGHT_VERSION: ${PLAYWRIGHT_VERSION:-v1.50.0-noble}
+    image: playwright-loophole:local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # user: pwuser
+    # volumes:
+    #   - ${LOCALIAS_CA_PATH}:/usr/local/share/ca-certificates/localias.crt:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    shm_size: 1gb
+# Other Compose services connect to ws://chrome:3000.

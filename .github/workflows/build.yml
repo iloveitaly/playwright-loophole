@@ -1,0 +1,32 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
+      - name: Build image and run browser integration test
+        run: just test
+      - name: Upload screenshots and container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-integration-${{ github.run_attempt }}
+          path: test-results/end-to-end/
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,12 @@
+{
+  "description": "Playwright Docker image with a transparent localhost TCP relay to host services, Chromium QUIC policy, and optional localias CA trust",
+  "homepage": "https://github.com/iloveitaly/playwright-loophole",
+  "keywords": [
+    "playwright",
+    "docker",
+    "localhost",
+    "localias",
+    "browser-testing",
+    "haproxy"
+  ]
+}

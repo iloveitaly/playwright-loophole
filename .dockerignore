@@ -1,0 +1,7 @@
+.git
+.agents
+.aws
+.codex
+node_modules
+test-results
+playwright-report

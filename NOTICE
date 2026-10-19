@@ -1,0 +1,6 @@
+GitHub setup and workflow maintenance recipes in Justfile and the pull request
+and Dependabot templates in .github are adapted from:
+https://github.com/iloveitaly/python-package-template
+Commit: 943b4a34466712d5c896b1ad29898920d22fc89d
+Copyright (c) 2024 Michael Bianco
+MIT license; see licenses/python-package-template-MIT.txt.
