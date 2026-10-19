@@ -9,7 +9,20 @@ default:
 
 # Build and run the end-to-end suite on a Linux Docker host (e.g. GitHub Actions).
 test:
-    python3 test/run.py
+    uv run --locked python test/run.py
+
+# Install the locked Python tooling into uv's project environment.
+setup:
+    uv sync --locked
+
+# Check Python and maintenance code without running the container tests.
+lint:
+    uv run --locked ruff check .
+    uv run --locked ruff format --check .
+
+lint-fix:
+    uv run --locked ruff check --fix .
+    uv run --locked ruff format .
 
 # Configure Actions permissions, metadata, squash merges, and default-branch protection.
 github_setup: github_repo_permissions_create github_repo_set_metadata github_enforce_squash_merge github_ruleset_protect_default_create

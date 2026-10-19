@@ -19,7 +19,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
+      - uses: jdx/mise-action@v4
+      - name: Check Python tooling
+        run: just lint
       - name: Build image and run browser integration test
         run: just test
       - name: Upload screenshots and container logs

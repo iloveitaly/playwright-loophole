@@ -1,0 +1,9 @@
+[tools]
+python = "3.12"
+uv = "0.12.19"
+"github:casey/just" = "1.58.0"
+gh = "latest"
+jq = "latest"
+
+[settings]
+python.uv_venv_auto = "create|source"

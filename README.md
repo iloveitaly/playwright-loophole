@@ -51,82 +51,61 @@ fail startup before running the command. A small shell supervisor preserves comm
 exit status and stops HAProxy on exit; tini reaps adopted children and forwards
 signals to the process group. Runtime config uses a private temporary directory.
 
-## End-to-end test (`just test`)
+## Tests and tooling
 
-Run on a Linux Docker host, including GitHub Actions `ubuntu-latest`, with
-Docker, Python 3, and [Just](https://just.systems/) installed:
-
-```sh
-just test
-# Optional: select an upstream image/browser version.
-PLAYWRIGHT_VERSION=v1.50.0-noble just test
-```
-
-The runner builds the shipping image, then a derived test image containing Python,
-a Playwright client matching the server's major/minor version, and `python-hosts`. It starts an HTTP service on the
-runner at an automatically assigned port and starts the container using its default
-Playwright server command. No localias installation or host-side pip install is
-required. Docker must use a local daemon reachable from the runner.
-
-Inside the container, `python-hosts` adds `service.loophole.test` to `/etc/hosts`,
-pointing at `127.0.0.1`. The Python browser script connects to the Playwright server
-and visits `http://service.loophole.test:<port>/`. That request must traverse
-HAProxy and the host gateway to reach the separate service. The fixture checks
-the HTTP Host header and returns unique text for each test run.
-
-The test asserts HTTP 200, the expected page text, and an existing, nonempty PNG
-screenshot. It also exports and checks the screenshot on the runner and verifies
-that the host service received a request. There are no optional skips in this test.
-`python-hosts` removes the entry in a `finally` block and checks that it is gone.
-The runner stops the service and removes the container on success or failure;
-the runner's own `/etc/hosts` is never modified. Test images remain for debugging.
-
-Artifacts are saved to `test-results/end-to-end/<run-id>/service.png` and
-`container.log`. A screenshot is also collected on assertion failure if capture
-succeeded. For GitHub Actions, run `just test` after checkout and Just setup, then
-use `actions/upload-artifact` with `if: always()` and the path
-`test-results/end-to-end/`. The `Build and Test` workflow in `.github/workflows/build.yml` runs these steps
-on pushes to main/master, pull requests, and manual dispatch.
-
-The suite has passed in GitHub Actions; it has not been executed locally. It covers HTTP through a custom hosts entry. The existing
-verification below provides additional TLS, IPv6, CA trust, and policy coverage.
-
-## Verification
-
-With localias serving an HTTPS URL whose root certificate you have mounted:
+Install [mise](https://mise.jdx.dev/) and a local Docker Engine. Tool versions are
+configured in `mise.toml`, following the Python package template's conventions:
+Python 3.12, uv, Just, GitHub CLI, and jq. Python packages live in `pyproject.toml`
+and `uv.lock`; uv creates and manages all Python environments and dependencies.
 
 ```sh
-docker run --rm --user pwuser \
-  --add-host=host.docker.internal:host-gateway \
-  -v "$PWD/test:/verification:ro" \
-  -v "$LOCALIAS_CA_PATH:/usr/local/share/ca-certificates/localias.crt:ro" \
-  -e LOOPHOLE_CA_CERT=/usr/local/share/ca-certificates/localias.crt \
-  -e LOOPHOLE_TEST_URL=https://api-test.myproject.localhost \
-  -w /verification playwright-loophole:local \
-  playwright test --workers=1 --output=/tmp/test-results
+mise install
+mise exec -- just setup
+mise exec -- just lint
+mise exec -- just test
+# Optional: choose another upstream release.
+PLAYWRIGHT_VERSION=v1.64.1-noble mise exec -- just test
 ```
 
-The suite verifies policy value/status, IPv4 and IPv6 TLS relay (including SNI),
-and browser navigation without ignoring certificate errors. IPv6 must be enabled
-for the dual-stack acceptance check. Run once as root and once as pwuser. The relay
-checks require your running host service; without LOOPHOLE_TEST_URL they skip.
+All tests are Python/pytest and run through `just test` on a Linux Docker host.
+GitHub Actions installs tools with `jdx/mise-action`, checks lint/formatting, and
+runs the suite. No browser tests run on the host. Node/npm remain part of the
+shipping Playwright runtime; they are not used to execute this repository's tests.
 
-Run `node --test test/entrypoint.test.cjs` for isolated startup regression tests.
-For a self-contained relay/TLS/NSS check without localias, run:
+The runner builds the shipping image, then a derived test image using uv-managed
+Python and the locked test dependencies. It constrains the Python Playwright client
+to the server's major/minor version inside the test image because Python may not
+publish every Node patch release. The repository's lockfile is not modified by
+this per-image resolution. Python 3.12 supports the older Playwright client releases
+used when backfilling upstream image tags.
 
-```sh
-docker run --rm --user pwuser -e LOOPHOLE_ENABLED=0 \
-  -v "$PWD/test:/verification:ro" playwright-loophole:local \
-  node /verification/relay-integration.cjs
-```
+The runner starts separate HTTP and HTTPS services on the host with a temporary
+root CA and signed server certificate. Each service checks the HTTP Host header;
+the HTTPS service also checks TLS SNI. The real entrypoint imports the CA and
+forwards loopback traffic to these services through the discovered host gateway.
+No localias installation, existing CA, or host `/etc/hosts` modification is needed.
 
-This fixture binds the container's non-loopback address as a stand-in for the host,
-creates a temporary CA, and starts the real entrypoint to test both loopback
-families on ports 80/443. It does not test platform host gateway discovery.
-Repeat without `--user pwuser` for root coverage.
+The complete suite runs once as root and once as pwuser:
 
-For lifecycle verification, run the server, send `docker stop --time 10`, and inspect
-its exit status/logs; repeat with `docker kill --signal=INT`.
+- `test/test_entrypoint.py`: bypass behavior, exit codes, malformed addresses and
+  ports, CA import/failure, listener conflicts, and synchronous readiness on 80/443.
+- `test/test_relay.py`: verified HTTP/HTTPS connections over IPv4 and IPv6 loopback,
+  preserving Host and TLS SNI.
+- `test/test_browser.py`: custom-host HTTP navigation, a nonempty PNG screenshot,
+  expected page text, HTTPS navigation with NSS trust, and the loaded QUIC policy.
+
+The `python-hosts` tool in `test/hosts.py` adds `service.loophole.test` to the
+container hosts file and removes it in cleanup, verifying both operations. Only
+this operation runs as root in the pwuser case; pytest and the browsers run as
+pwuser. HTTPS browser navigation uses `fixture.localhost`, exercising Chromium's
+internal localhost resolver without a hosts override or ignored certificate errors.
+IPv6 loopback must be available; checks fail rather than silently skipping coverage.
+
+Screenshots, JUnit reports, and container logs are exported to
+`test-results/end-to-end/<run-id>/<user>/` and uploaded by Actions even on failure.
+The runner removes containers and stops host services on success or failure;
+derived test images remain for debugging. Tests are verified in GitHub Actions,
+not executed locally during development.
 
 ## Published images and weekly builds
 
@@ -146,8 +125,8 @@ Previously published releases remain available.
 
 Each variant builds on native AMD64 and ARM64 GitHub runners. The Python browser
 suite tests the exact uploaded digest for each architecture before any version
-tags are published. It verifies the host relay, page text, screenshot, and hosts
-entry cleanup. Screenshots/logs are uploaded per variant and architecture.
+tags are published. It runs the full root/pwuser suite, including IPv4/IPv6 forwarding, TLS
+trust and SNI, QUIC policy, page text, screenshots, and hosts entry cleanup. Screenshots/logs are uploaded per variant and architecture.
 Only after every build/test succeeds does the workflow publish the multi-platform
 version tags and matching upstream-style `-amd64` and `-arm64` tags. Failed tests
 can leave untagged build digests in GHCR but do not update public version tags.
