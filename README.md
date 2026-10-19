@@ -40,11 +40,13 @@ It is imported into `$HOME/.pki/nssdb`, even with forwarding disabled. Ensure HO
 points at a writable directory for the selected user. CA import failures stop
 startup. This configures Chromium trust; curl uses `--cacert` separately.
 
-Managed policies in `/etc/chromium/policies/managed` and
-`/etc/opt/chrome/policies/managed` set `QuicAllowed` to false. Tests need no
-`--disable-quic` argument. Verify policy loading for your selected browser/channel;
-the policy test uses full Chromium (`channel: 'chromium'`) so chrome://policy is
-available. Firefox and WebKit do not use these policies or Chromium's NSS store.
+Managed policies in `/etc/chromium/policies/managed`,
+`/etc/opt/chrome/policies/managed`, and
+`/etc/opt/chrome_for_testing/policies/managed` set `QuicAllowed` to false. Tests
+need no `--disable-quic` argument. Verify policy loading for your selected
+browser/channel; the policy test uses full Chromium (`channel: 'chromium'`) so
+chrome://policy is available. Firefox and WebKit do not use these policies or
+Chromium's NSS store.
 
 HAProxy daemon startup returns only after binding its listeners. Listener conflicts
 fail startup before running the command. A small shell supervisor preserves command
