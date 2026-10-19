@@ -128,37 +128,6 @@ Repeat without `--user pwuser` for root coverage.
 For lifecycle verification, run the server, send `docker stop --time 10`, and inspect
 its exit status/logs; repeat with `docker kill --signal=INT`.
 
-## GitHub repository setup
-
-Repository setup recipes are adapted from
-[python-package-template](https://github.com/iloveitaly/python-package-template).
-Install `gh`, `jq`, Just, and Bash, authenticate with `gh auth login`, and push an
-initial branch so GitHub has a default branch. Then run:
-
-```sh
-just github_setup
-```
-
-This applies `metadata.json` as the repository description, homepage, and topics;
-enables squash merges only and automatic deletion of merged branches; creates or
-updates a force-push protection ruleset for the actual default branch; and matches
-the template's Actions defaults (write permissions and permission to approve PR
-reviews). The checked-in test workflow explicitly requests only `contents: read`.
-The setup command requires repository administration rights and changes GitHub
-settings. The recipes have been imported but have not been applied remotely.
-
-Individual steps are available as `github_repo_set_metadata`,
-`github_repo_permissions_create`, `github_enforce_squash_merge`, and
-`github_ruleset_protect_default_create`. After editing metadata, rerun
-`just github_repo_set_metadata`; topics are replaced to match the file exactly.
-`github_ruleset_protect_default_delete` removes only the ruleset managed here.
-
-Use `just github_last_build_failure` to inspect the latest Build workflow on your
-current branch, and `just github_rerun_failed` to rerun failed jobs. The GitHub
-Actions workflow uploads screenshots and logs even on failure. Dependabot checks
-Actions and Docker dependencies weekly; `.github/PULL_REQUEST_TEMPLATE.md` includes
-motivation and testing prompts. Image publication is configured separately below.
-
 ## Published images and weekly builds
 
 Images are published to `ghcr.io/iloveitaly/playwright-loophole` for `linux/amd64`
