@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
       - name: Build image and run browser integration test
         run: just test
       - name: Upload screenshots and container logs
