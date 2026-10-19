@@ -88,8 +88,7 @@ use `actions/upload-artifact` with `if: always()` and the path
 `test-results/end-to-end/`. The `Build and Test` workflow in `.github/workflows/build.yml` runs these steps
 on pushes to main/master, pull requests, and manual dispatch.
 
-This new suite is prepared for its first run in GitHub Actions; it has not been
-executed locally. It covers HTTP through a custom hosts entry. The existing
+The suite has passed in GitHub Actions; it has not been executed locally. It covers HTTP through a custom hosts entry. The existing
 verification below provides additional TLS, IPv6, CA trust, and policy coverage.
 
 ## Verification
@@ -158,21 +157,56 @@ Use `just github_last_build_failure` to inspect the latest Build workflow on you
 current branch, and `just github_rerun_failed` to rerun failed jobs. The GitHub
 Actions workflow uploads screenshots and logs even on failure. Dependabot checks
 Actions and Docker dependencies weekly; `.github/PULL_REQUEST_TEMPLATE.md` includes
-motivation and testing prompts. No package or image publishing workflow is enabled.
+motivation and testing prompts. Image publication is configured separately below.
 
-## Publishing
+## Published images and weekly builds
 
-Build matching upstream tags, for example:
+Images are published to `ghcr.io/iloveitaly/playwright-loophole` for `linux/amd64`
+and `linux/arm64`. Replace the upstream registry/repository and keep the tag:
+
+```yaml
+image: ghcr.io/iloveitaly/playwright-loophole:v1.64.1-noble
+```
+
+`Build and Publish Images` runs every Monday at **06:23 UTC**. It discovers the
+latest stable release directly from MCR, then builds all available supported
+variants: `vX.Y.Z`, `vX.Y.Z-noble`, `vX.Y.Z-jammy`, and `vX.Y.Z-resolute`.
+Prerelease and unsupported distribution tags are excluded. This tracks the latest
+stable release, rather than rebuilding the entire historical upstream catalog.
+Previously published releases remain available.
+
+Each variant builds on native AMD64 and ARM64 GitHub runners. The Python browser
+suite tests the exact uploaded digest for each architecture before any version
+tags are published. It verifies the host relay, page text, screenshot, and hosts
+entry cleanup. Screenshots/logs are uploaded per variant and architecture.
+Only after every build/test succeeds does the workflow publish the multi-platform
+version tags and matching upstream-style `-amd64` and `-arm64` tags. Failed tests
+can leave untagged build digests in GHCR but do not update public version tags.
+
+Weekly builds refresh the selected version's OS packages even if upstream has not
+released a new Playwright version. Version tags therefore move on rebuild; pin an
+image digest when immutable deployments are required. No `latest` alias is added.
+Your Playwright client version must match the image's version.
+
+To publish immediately, or backfill another supported stable release:
+
+```sh
+gh workflow run publish.yml                       # newest stable upstream release
+gh workflow run publish.yml -f version=v1.50.0    # all available variants of this release
+```
+
+Publishing uses the repository's `GITHUB_TOKEN` with job-scoped `packages: write`;
+no additional registry secret is required. GHCR package visibility is independent
+of repository visibility: if the initial package is private, set its visibility
+to public in the package settings to permit anonymous pulls.
+
+For a manual local build (not part of the CI test procedure):
 
 ```sh
 docker buildx build --platform linux/amd64,linux/arm64 \
   --build-arg PLAYWRIGHT_VERSION=v1.50.0-noble \
-  -t ghcr.io/YOUR-ORG/playwright-loophole:v1.50.0-noble --push .
+  -t ghcr.io/iloveitaly/playwright-loophole:v1.50.0-noble --push .
 ```
-
-Use a CI matrix of exact upstream tags matching consumers' `@playwright/test`
-versions. Run the acceptance suite before publishing each version/architecture.
-No registry or release automation is configured in this repository.
 
 Native Linux hosts using ufw/firewalld must allow Docker bridge traffic to the
 localias TCP ports. For the default bridge, an example is

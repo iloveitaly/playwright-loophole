@@ -48,7 +48,9 @@ def main():
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     run_id = uuid.uuid4().hex
-    image = f"playwright-loophole:test-{run_id}"
+    # Publishing supplies an immutable digest so tests exercise the exact artifact.
+    supplied_image = os.environ.get("TEST_IMAGE")
+    image = supplied_image or f"playwright-loophole:test-{run_id}"
     test_image = f"playwright-loophole:verification-{run_id}"
     name = f"loophole-e2e-{run_id}"
     expected_text = f"The host service was reached through playwright-loophole: {run_id}"
@@ -56,7 +58,10 @@ def main():
     artifacts.mkdir(parents=True)
     version = os.environ.get("PLAYWRIGHT_VERSION", "v1.50.0-noble")
     # Build the actual image first, then add Python-only test dependencies.
-    docker("build", "--build-arg", f"PLAYWRIGHT_VERSION={version}", "-t", image, ".")
+    if supplied_image:
+        docker("pull", supplied_image)
+    else:
+        docker("build", "--build-arg", f"PLAYWRIGHT_VERSION={version}", "-t", image, ".")
     docker("build", "-f", "test/Dockerfile", "--build-arg", f"LOOPHOLE_IMAGE={image}", "-t", test_image, ".")
 
     service = ThreadingHTTPServer(("0.0.0.0", 0), partial(Service, expected_text=expected_text))
