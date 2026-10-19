@@ -1,4 +1,4 @@
-# GitHub recipes adapted from iloveitaly/python-package-template (see NOTICE).
+# GitHub recipes adapted from iloveitaly/python-package-template (see licenses/python-package-template-MIT.txt).
 # Bash is available on GitHub Actions Ubuntu runners; no zsh dependency.
 set shell := ["bash", "-euo", "pipefail", "-c"]
 set script-interpreter := ["bash", "-euo", "pipefail"]
