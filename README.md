@@ -63,7 +63,7 @@ PLAYWRIGHT_VERSION=v1.50.0-noble just test
 ```
 
 The runner builds the shipping image, then a derived test image containing Python,
-a matching Playwright client, and `python-hosts`. It starts an HTTP service on the
+a Playwright client matching the server's major/minor version, and `python-hosts`. It starts an HTTP service on the
 runner at an automatically assigned port and starts the container using its default
 Playwright server command. No localias installation or host-side pip install is
 required. Docker must use a local daemon reachable from the runner.
@@ -186,7 +186,9 @@ can leave untagged build digests in GHCR but do not update public version tags.
 Weekly builds refresh the selected version's OS packages even if upstream has not
 released a new Playwright version. Version tags therefore move on rebuild; pin an
 image digest when immutable deployments are required. No `latest` alias is added.
-Your Playwright client version must match the image's version.
+Your Playwright client major/minor version must match the image's version
+([protocol compatibility](https://playwright.dev/python/docs/api/class-browsertype#browser-type-connect)).
+Python does not necessarily publish every patch version released for Node.
 
 To publish immediately, or backfill another supported stable release:
 
