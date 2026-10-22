@@ -137,4 +137,13 @@ On native Linux hosts running ufw or firewalld, allow traffic from the Docker br
 
 References: [upstream image contents/version matching](https://playwright.dev/docs/docker) and [Chromium Linux managed policies](https://www.chromium.org/administrators/linux-quick-start/).
 
+## Related
+
+- [pytest-playwright-visual-snapshot](https://github.com/iloveitaly/pytest-playwright-visual-snapshot): Pytest plugin for visual regression testing and snapshot assertions with Playwright.
+- [python-starter-template](https://github.com/iloveitaly/python-starter-template): Full-stack application template (FastAPI + React Router) demonstrating containerized Playwright testing and local dev networking.
+- [pytest-playwright-artifacts](https://github.com/iloveitaly/pytest-playwright-artifacts): Automatically capture screenshots, rendered HTML, and console logs on Playwright test failures.
+- [localias](https://github.com/peterldowns/localias): Custom local domain aliases with automated HTTPS certificates for local dev servers.
+- [github-action-localias](https://github.com/iloveitaly/github-action-localias): Setup and run Localias domains with browser/NSS certificate handling on GitHub Actions.
+- [docker-hosts](https://github.com/iloveitaly/docker-hosts): Automatically manage Docker container hostnames in `/etc/hosts` for local development and CI.
+
 ## [MIT License](LICENSE.md)
