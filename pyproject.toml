@@ -1,7 +1,8 @@
 [project]
 name = "playwright-loophole-tooling"
 version = "0.0.0"
-description = "Python test and maintenance tooling for the playwright-loophole Docker image"
+description = "Playwright Docker image with a transparent loopback TCP relay to host services"
+keywords = ["playwright", "docker", "localias", "haproxy"]
 requires-python = ">=3.12"
 dependencies = []
 
