@@ -38,7 +38,33 @@ with sync_playwright() as p:
     page.goto("https://my-app.test")
 ```
 
-For Docker Compose, run `docker compose -f compose.example.yaml up --build` (see [`compose.example.yaml`](compose.example.yaml)). Other services on the same network can connect to the browser server with `chromium.connect('ws://chrome:3000')` as long as your client Playwright version matches the image version. The image installs the matching npm driver and test runner at build time, so container startup does not download anything from npm.
+For Docker Compose, save this as `compose.yaml` in a checkout of this repository:
+
+```yaml
+services:
+  chrome:
+    build:
+      context: .
+      args:
+        PLAYWRIGHT_VERSION: ${PLAYWRIGHT_VERSION:-v1.50.0-noble}
+    image: playwright-loophole:local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LOOPHOLE_CA_CERT_B64: ${LOCALIAS_CA_B64:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    shm_size: 1gb
+```
+
+After starting localias, export its root CA and start the browser service. This command works on Linux and macOS:
+
+```sh
+export LOCALIAS_CA_B64="$(sudo localias debug cert --print | base64 | tr -d '\n')"
+docker compose up --build -d chrome
+```
+
+See [`compose.example.yaml`](compose.example.yaml) for the optional certificate bind mount. Other services on the same network can connect to the browser server with `chromium.connect('ws://chrome:3000')` as long as your client Playwright version matches the image version. The image installs the matching npm driver and test runner at build time, so container startup does not download anything from npm.
 
 You can override the container command as usual, such as `docker run ... IMAGE node --version`. The image runs as root by default to match the upstream Playwright image, or you can pass `--user pwuser` to run as a non-root user because the HAProxy binary has the `bind-service` capability.
 
@@ -51,6 +77,7 @@ You can override the container command as usual, such as `docker run ... IMAGE n
 | `LOOPHOLE_HTTP_PORT` | `80` | HTTP listener and target port. |
 | `LOOPHOLE_HTTPS_PORT` | `443` | HTTPS listener and target port. |
 | `LOOPHOLE_CA_CERT` | `/usr/local/share/ca-certificates/localias.crt` | Optional root CA to import into the current user's NSS database. |
+| `LOOPHOLE_CA_CERT_B64` | | Optional root CA PEM encoded as one line of standard base64, including the `BEGIN CERTIFICATE` and `END CERTIFICATE` lines. Overrides `LOOPHOLE_CA_CERT`. |
 | `PLAYWRIGHT_PORT` | `3000` | Default server port. Update Docker port publishing if you change it. |
 
 ### Host discovery and certificates
@@ -58,6 +85,20 @@ You can override the container command as usual, such as `docker run ... IMAGE n
 Host discovery checks `host.docker.internal` first and falls back to the IPv4 default gateway. Docker Desktop and OrbStack define `host.docker.internal` automatically, while native Linux needs `--add-host=host.docker.internal:host-gateway`. The host service must listen on an address the container can reach. On native Linux, a service bound only to host loopback is unreachable across the bridge gateway; either run the container with host networking and `LOOPHOLE_ENABLED=0`, or configure localias to listen on the bridge address. Setting `LOOPHOLE_TARGET_IP` to a loopback address automatically bypasses the relay.
 
 Mount the localias root CA read-only at `/usr/local/share/ca-certificates/localias.crt` (as shown in `compose.example.yaml`). The entrypoint imports that certificate into `$HOME/.pki/nssdb` even when forwarding is disabled, and stops startup if the import fails. Make sure `HOME` points to a writable directory for the active user. Chromium trusts certificates in `$HOME/.pki/nssdb`, while curl still requires `--cacert`.
+
+Alternatively, pass the root CA as `LOOPHOLE_CA_CERT_B64` to avoid bind-mount permissions and missing-file issues. Start localias first, then produce the value on the host with:
+
+```sh
+sudo localias debug cert --print | base64 -w0
+```
+
+On macOS, `base64` has no `-w0`; use this portable form:
+
+```sh
+sudo localias debug cert --print | base64 | tr -d '\n'
+```
+
+For `compose.example.yaml`, set `LOCALIAS_CA_B64` to that output and uncomment the `LOOPHOLE_CA_CERT_B64` environment entry. The entrypoint decodes the value into a temporary file, imports it into NSS, and removes the file. Invalid base64 or a failed certificate import stops startup.
 
 Managed policies in `/etc/chromium/policies/managed`, `/etc/opt/chrome/policies/managed`, and `/etc/opt/chrome_for_testing/policies/managed` set `QuicAllowed` to `false`, so tests do not need `--disable-quic`. Check that your chosen browser and channel load these policies; the policy test runs full Chromium (`channel: 'chromium'`) so `chrome://policy` is available. Firefox and WebKit ignore both these policies and Chromium's NSS database.
 

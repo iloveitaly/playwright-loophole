@@ -1,7 +1,9 @@
+import base64
 import os
 import socket
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +16,7 @@ def run_entrypoint(tmp_path, overrides, command=None):
         "HOME": str(tmp_path),
         "LOOPHOLE_ENABLED": "1",
         "LOOPHOLE_CA_CERT": str(tmp_path / "absent.crt"),
+        "LOOPHOLE_CA_CERT_B64": "",
         "LOOPHOLE_TARGET_IP": "192.0.2.1",
         "LOOPHOLE_HTTP_PORT": "80",
         "LOOPHOLE_HTTPS_PORT": "443",
@@ -69,6 +72,41 @@ def test_ca_is_imported_even_when_relay_disabled(tmp_path):
         timeout=10,
     )
     assert trust.returncode == 0, trust.stderr
+
+
+def test_base64_ca_is_imported_even_when_relay_disabled(tmp_path):
+    cert = Path(os.environ["LOOPHOLE_CA_CERT"]).read_bytes()
+    result = run_entrypoint(
+        tmp_path,
+        {
+            "LOOPHOLE_ENABLED": "0",
+            "LOOPHOLE_CA_CERT_B64": base64.b64encode(cert).decode("ascii"),
+            "TMPDIR": str(tmp_path),
+        },
+    )
+    assert result.returncode == 23, result.stderr
+    trust = subprocess.run(
+        ["certutil", "-d", f"sql:{tmp_path}/.pki/nssdb", "-L", "-n", "localias-loophole-ca"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert trust.returncode == 0, trust.stderr
+    assert not list(tmp_path.glob("tmp.*"))
+
+
+def test_invalid_base64_ca_stops_before_command(tmp_path):
+    result = run_entrypoint(
+        tmp_path,
+        {
+            "LOOPHOLE_ENABLED": "0",
+            "LOOPHOLE_CA_CERT_B64": "not-base64",
+            "TMPDIR": str(tmp_path),
+        },
+    )
+    assert result.returncode != 0 and result.returncode != 23
+    assert "LOOPHOLE_CA_CERT_B64" in result.stderr
+    assert not list(tmp_path.glob("tmp.*"))
 
 
 def test_bad_ca_stops_before_command(tmp_path):

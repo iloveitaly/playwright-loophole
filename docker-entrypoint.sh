@@ -4,7 +4,14 @@ log() { echo "[playwright-loophole] $*"; }
 fail() { echo "[playwright-loophole] ERROR: $*" >&2; exit 1; }
 
 # Import trust even when forwarding is disabled or the host shares our namespace.
-CA_CERT=${LOOPHOLE_CA_CERT:-/usr/local/share/ca-certificates/localias.crt}
+if [ -n "${LOOPHOLE_CA_CERT_B64:-}" ]; then
+    CA_CERT=$(mktemp)
+    trap 'rm -f "$CA_CERT"' EXIT
+    printf '%s' "$LOOPHOLE_CA_CERT_B64" | base64 -d > "$CA_CERT" \
+        || fail "LOOPHOLE_CA_CERT_B64 is not valid base64"
+else
+    CA_CERT=${LOOPHOLE_CA_CERT:-/usr/local/share/ca-certificates/localias.crt}
+fi
 if [ -f "$CA_CERT" ]; then
     NSS_DIR="${HOME:?HOME must be set}/.pki/nssdb"
     mkdir -p "$NSS_DIR"
@@ -14,6 +21,10 @@ if [ -f "$CA_CERT" ]; then
     certutil -d "sql:$NSS_DIR" -D -n localias-loophole-ca >/dev/null 2>&1 || true
     certutil -d "sql:$NSS_DIR" -A -t 'C,,' -n localias-loophole-ca -i "$CA_CERT"
     log "Trusted Root CA from $CA_CERT in $NSS_DIR"
+fi
+if [ -n "${LOOPHOLE_CA_CERT_B64:-}" ]; then
+    rm -f "$CA_CERT"
+    trap - EXIT
 fi
 
 [ "$#" -gt 0 ] || fail 'No command supplied.'

@@ -8,6 +8,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # user: pwuser
+    # environment:
+    #   LOOPHOLE_CA_CERT_B64: ${LOCALIAS_CA_B64:-}
     # volumes:
     #   - ${LOCALIAS_CA_PATH}:/usr/local/share/ca-certificates/localias.crt:ro
     ports:
