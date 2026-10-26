@@ -143,7 +143,7 @@ The full suite runs once as `root` and once as `pwuser`:
 
 The runner writes screenshots, JUnit reports, and container logs to `test-results/end-to-end/<run-id>/<user>/`, and GitHub Actions uploads them even when a test run fails. After each run, the runner stops the host servers and removes test containers while leaving the derived test images in place for debugging.
 
-## Published images and weekly builds
+## Published images and automatic builds
 
 Multi-platform images for `linux/amd64` and `linux/arm64` are published to `ghcr.io/iloveitaly/playwright-loophole`. Swap out the upstream registry and repository while keeping the same tag:
 
@@ -151,7 +151,7 @@ Multi-platform images for `linux/amd64` and `linux/arm64` are published to `ghcr
 image: ghcr.io/iloveitaly/playwright-loophole:v1.64.1-noble
 ```
 
-The `Build and Publish Images` workflow runs every Monday at 06:23 UTC. It queries MCR for the latest stable Playwright release and builds all available supported variants (`vX.Y.Z`, `vX.Y.Z-noble`, `vX.Y.Z-jammy`, and `vX.Y.Z-resolute`), skipping prereleases and unsupported distribution tags. Scheduled runs build only the newest stable release, while older published releases stay in GHCR.
+The `Build and Publish Images` workflow runs on every push to `main` or `master`, every Monday at 06:23 UTC, and on manual dispatch. It queries MCR for the latest stable Playwright release and builds all available supported variants (`vX.Y.Z`, `vX.Y.Z-noble`, `vX.Y.Z-jammy`, and `vX.Y.Z-resolute`), skipping prereleases and unsupported distribution tags. Push and scheduled runs build only the newest stable release, while older published releases stay in GHCR.
 
 Each variant builds on native AMD64 and ARM64 GitHub runners. Before publishing any version tags, the workflow runs the Python browser test suite (as both `root` and `pwuser`) against the exact uploaded image digest on each architecture and uploads the resulting screenshots and logs. Once every build and test passes, the workflow publishes the multi-platform version tags along with matching upstream-style `-amd64` and `-arm64` tags. If a test fails, the untagged build digest may remain in GHCR, but public version tags are left unchanged.
 

@@ -1,6 +1,8 @@
 name: Build and Publish Images
 
 on:
+  push:
+    branches: [main, master]
   schedule:
     # Rebuild every Monday at 06:23 UTC, including updated base OS packages.
     - cron: '23 6 * * 1'
