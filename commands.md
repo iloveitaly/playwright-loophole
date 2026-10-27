@@ -74,9 +74,7 @@ def create_pending_order(
     """
 
     # let's validate the stripe checkout session id is real
-    stripe_session = stripe_client.v1.checkout.sessions.retrieve(
-        data.stripe_checkout_session_id
-    )
+    stripe_session = stripe_client.v1.checkout.sessions.retrieve(data.stripe_checkout_session_id)
 
     if stripe_session.status != "open":
         raise HTTPException(
@@ -84,9 +82,7 @@ def create_pending_order(
             detail="Your checkout session has expired. Please refresh the page and try again.",
         )
 
-    order = Order.one_or_none(
-        stripe_checkout_session_id=data.stripe_checkout_session_id
-    )
+    order = Order.one_or_none(stripe_checkout_session_id=data.stripe_checkout_session_id)
 
     if order:
         order.email = data.email
@@ -116,9 +112,7 @@ def complete_ticket_purchase(
     order.status = OrderState.paid
     order.save()
 
-    redirect_url = (
-        f"{origin_url}/screening/{order.screening_id}/confirmation/{session_id}"
-    )
+    redirect_url = f"{origin_url}/screening/{order.screening_id}/confirmation/{session_id}"
     return RedirectResponse(url=redirect_url)
 
 
@@ -129,9 +123,7 @@ def ticket_purchase_status(
     screening_id: TypeID = Query(),
 ) -> str:
     stripe_client = distribution.stripe_client()
-    stripe_session = stripe_client.v1.checkout.sessions.retrieve(
-        stripe_checkout_session_id
-    )
+    stripe_session = stripe_client.v1.checkout.sessions.retrieve(stripe_checkout_session_id)
 
     if stripe_session.status != "complete":
         raise HTTPException(
