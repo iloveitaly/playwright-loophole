@@ -7,3 +7,19 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
+
+# START AI INSTRUCTION IGNORES
+/.agents/skills/dev-in-browser/SKILL.md
+/.agents/skills/fastapi_stripe/SKILL.md
+/.agents/skills/fix-tests/SKILL.md
+/.agents/skills/implement-fastapi-routes/SKILL.md
+/.agents/skills/plan-only/SKILL.md
+/.agents/skills/python-command/SKILL.md
+/.agents/skills/react-router-client-loader/SKILL.md
+/.agents/skills/refactor-on-instructions/SKILL.md
+/.agents/skills/secrets/SKILL.md
+/.agents/skills/standalone-python-scripts/SKILL.md
+/.agents/skills/stripe-backend/SKILL.md
+/.agents/skills/typescript-docstring/SKILL.md
+/AGENTS.md
+# END AI INSTRUCTION IGNORES
