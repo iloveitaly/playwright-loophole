@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -26,6 +27,16 @@ def artifacts():
 def playwright():
     with sync_playwright() as instance:
         yield instance
+
+
+@pytest.fixture(scope="session")
+def chromium_executable():
+    # Python may lack the Node patch release and expect a different browser revision
+    executable = subprocess.check_output(
+        ["node", "-p", 'require("playwright").chromium.executablePath()'], text=True
+    ).strip()
+    assert Path(executable).is_file(), executable
+    return executable
 
 
 @pytest.fixture(scope="session")

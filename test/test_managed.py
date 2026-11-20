@@ -134,9 +134,11 @@ def running_localias(tmp_path):
         thread.join(timeout=5)
 
 
-def test_direct_routing_trust_and_websocket(running_localias, playwright, tmp_path, artifacts):
+def test_direct_routing_trust_and_websocket(
+    running_localias, playwright, chromium_executable, tmp_path, artifacts
+):
     process, env = running_localias
-    browser = playwright.chromium.launch(env=env)
+    browser = playwright.chromium.launch(env=env, executable_path=chromium_executable)
     try:
         page = browser.new_page()
         for domain, upstream in [("one", "one"), ("two", "two"), ("ipv6", "ipv6")]:

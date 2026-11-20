@@ -178,6 +178,8 @@ PLAYWRIGHT_VERSION=v1.64.1-noble mise exec -- just test
 
 The test runner builds the shipping image first and then builds a derived test image with uv-managed Python and the locked test dependencies. Inside the test image, it pins the Python Playwright client to the server's major and minor version because the Python package does not always publish every Node patch release. Resolving that version inside the test image leaves the repository's `uv.lock` untouched. Python 3.12 remains compatible with the older Playwright client releases needed when backfilling earlier upstream image tags.
 
+Tests that launch Chromium directly get its executable path from the image's matching Node Playwright driver. Python and Node patch releases can reference different browser revisions even when their major/minor protocol versions match; this keeps the tests using the browser installed in the shipping image.
+
 On the host, the runner starts separate HTTP and HTTPS test servers backed by a temporary root CA and signed server certificate. Both servers check the HTTP `Host` header, and the HTTPS server also checks TLS SNI. Inside the container, the entrypoint imports the temporary CA and forwards loopback traffic to the host servers through the discovered gateway, so running the suite does not require localias, an existing CA, or edits to the host's `/etc/hosts`.
 
 The full suite runs once as `root` and once as `pwuser`:

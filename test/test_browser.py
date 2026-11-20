@@ -45,9 +45,11 @@ def test_chromium_trusts_ca_without_ignoring_https_errors(page, expected_text):
     expect(page.locator(BODY_SELECTOR)).to_contain_text(expected_text)
 
 
-def test_quic_policy_value_and_status(playwright):
+def test_quic_policy_value_and_status(playwright, chromium_executable):
     # full chromium has chrome://policy; the legacy headless shell does not
-    browser = playwright.chromium.launch(channel=CHROMIUM_CHANNEL)
+    browser = playwright.chromium.launch(
+        channel=CHROMIUM_CHANNEL, executable_path=chromium_executable
+    )
     try:
         page = browser.new_page()
 
