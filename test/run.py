@@ -299,6 +299,7 @@ def run_pytest(name: str) -> None:
         "pytest",
         "-v",
         "--tb=short",
+        "--ignore=test/test_managed.py",
         f"--junitxml={CONTAINER_ARTIFACTS}/pytest.xml",
     )
 
@@ -522,6 +523,67 @@ def run_test_suites(
         raise RuntimeError("Suite failures: " + "; ".join(failures))
 
 
+def run_managed_suite(test_image: str, run_id: str) -> None:
+    "verify direct upstream routing on an isolated sibling-container network"
+
+    network = f"loophole-managed-{run_id}"
+    name = f"{network}-browser"
+    services = [f"{network}-one", f"{network}-two"]
+    artifacts = ARTIFACTS / run_id / "managed"
+    artifacts.mkdir(parents=True)
+    docker("network", "create", network)
+    try:
+        for service, label in zip(services, ("one", "two"), strict=True):
+            docker(
+                "run",
+                "--detach",
+                "--name",
+                service,
+                "--network",
+                network,
+                "--network-alias",
+                f"managed-{label}",
+                "--entrypoint",
+                "uv",
+                "--env",
+                f"FIXTURE_NAME={label}",
+                test_image,
+                "run",
+                "--no-sync",
+                "python",
+                "test/managed_service.py",
+            )
+        docker(
+            "run",
+            "--detach",
+            "--name",
+            name,
+            "--network",
+            network,
+            f"--shm-size={CONTAINER_SHM_SIZE}",
+            "--env",
+            "LOOPHOLE_ENABLED=0",
+            test_image,
+        )
+        docker(
+            "exec",
+            name,
+            *UV_RUN,
+            "pytest",
+            "-v",
+            "--tb=short",
+            "test/test_managed.py",
+            f"--junitxml={CONTAINER_ARTIFACTS}/pytest.xml",
+        )
+        copy_and_verify_screenshot(name, artifacts, "managed")
+    finally:
+        collect_container_artifacts(name, artifacts)
+        remove_container(name)
+        for service in services:
+            remove_container(service)
+        docker("network", "rm", network)
+
+
 def main() -> None:
     "entry point for executing end-to-end integration tests"
 
@@ -548,6 +610,8 @@ def main() -> None:
             )
 
             assert all(server.successful_requests > 0 for server in servers)
+
+    run_managed_suite(test_image, run_id)
 
 
 if __name__ == "__main__":

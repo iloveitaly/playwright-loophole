@@ -37,7 +37,7 @@ def run_entrypoint(
         **os.environ,
         "HOME": str(tmp_path),
         "LOOPHOLE_ENABLED": ENABLED_LOOPHOLE,
-        "LOOPHOLE_CA_CERT": str(tmp_path / "absent.crt"),
+        "LOOPHOLE_CA_CERT": "",
         "LOOPHOLE_CA_CERT_B64": "",
         "LOOPHOLE_TARGET_IP": DEFAULT_TARGET_IP,
         "LOOPHOLE_HTTP_PORT": DEFAULT_HTTP_PORT,
@@ -151,6 +151,13 @@ def test_bad_ca_stops_before_command(tmp_path: Path) -> None:
     result = run_entrypoint(tmp_path, {"LOOPHOLE_CA_CERT": str(cert)})
 
     assert result.returncode not in (SUCCESS_EXIT_CODE, PASSTHROUGH_EXIT_CODE)
+
+
+def test_missing_explicit_ca_stops_before_command(tmp_path: Path) -> None:
+    result = run_entrypoint(tmp_path, {"LOOPHOLE_CA_CERT": str(tmp_path / "absent.crt")})
+
+    assert result.returncode == ERROR_EXIT_CODE
+    assert "does not exist" in result.stderr
 
 
 def test_conflicting_listener_stops_before_command(tmp_path: Path) -> None:

@@ -11,16 +11,14 @@ if [ -n "${LOOPHOLE_CA_CERT_B64:-}" ]; then
         || fail "LOOPHOLE_CA_CERT_B64 is not valid base64"
 else
     CA_CERT=${LOOPHOLE_CA_CERT:-/usr/local/share/ca-certificates/localias.crt}
-fi
-if [ -f "$CA_CERT" ]; then
-    NSS_DIR="${HOME:?HOME must be set}/.pki/nssdb"
-    mkdir -p "$NSS_DIR"
-    if [ ! -f "$NSS_DIR/cert9.db" ]; then
-        certutil -d "sql:$NSS_DIR" -N --empty-password
+    if [ -n "${LOOPHOLE_CA_CERT:-}" ] && [ ! -f "$CA_CERT" ]; then
+        fail "LOOPHOLE_CA_CERT does not exist: $CA_CERT"
     fi
-    certutil -d "sql:$NSS_DIR" -D -n localias-loophole-ca >/dev/null 2>&1 || true
-    certutil -d "sql:$NSS_DIR" -A -t 'C,,' -n localias-loophole-ca -i "$CA_CERT"
-    log "Trusted Root CA from $CA_CERT in $NSS_DIR"
+fi
+EXTERNAL_CA=0
+if [ -f "$CA_CERT" ]; then
+    /usr/local/bin/loophole-trust-ca "$CA_CERT"
+    EXTERNAL_CA=1
 fi
 if [ -n "${LOOPHOLE_CA_CERT_B64:-}" ]; then
     rm -f "$CA_CERT"
@@ -32,6 +30,15 @@ if [ "${LOOPHOLE_ENABLED:-1}" = 0 ]; then
     log 'LOOPHOLE_ENABLED=0; skipping loopback proxy.'
     exec "$@"
 fi
+if [ -n "${LOOPHOLE_MAP:-}${LOOPHOLE_MAP_FILE:-}" ]; then
+    if [ "$EXTERNAL_CA" = 0 ]; then
+        [ "$(id -u)" = 0 ] || fail 'Container-managed localias requires root; run without --user pwuser.'
+        log 'Mode: container-managed localias (direct upstreams).'
+        exec /usr/bin/python3 /usr/local/lib/loophole/runtime.py managed "$@"
+    fi
+    log 'External CA supplied; ignoring LOOPHOLE_MAP/LOOPHOLE_MAP_FILE.'
+fi
+log 'Mode: host relay.'
 HTTP_PORT=${LOOPHOLE_HTTP_PORT:-80}
 HTTPS_PORT=${LOOPHOLE_HTTPS_PORT:-443}
 for port in "$HTTP_PORT" "$HTTPS_PORT"; do
@@ -48,7 +55,7 @@ if [ -z "$HOST_IP" ]; then
 fi
 [ -n "$HOST_IP" ] || fail 'Cannot discover host. Set LOOPHOLE_TARGET_IP or add host.docker.internal:host-gateway.'
 # Validate literal addresses before interpolating HAProxy configuration.
-node -e 'if (!require("net").isIP(process.argv[1])) process.exit(1)' "$HOST_IP" || fail "Invalid host IP: $HOST_IP"
+/usr/bin/python3 -c 'import ipaddress, sys; ipaddress.ip_address(sys.argv[1])' "$HOST_IP" || fail "Invalid host IP: $HOST_IP"
 case "$HOST_IP" in
     127.*|::1|::ffff:127.*) log "Host resolves to loopback ($HOST_IP); skipping proxy."; exec "$@" ;;
 esac
@@ -99,10 +106,10 @@ CONFIG
 haproxy -f "$RUNTIME_DIR/haproxy.cfg" -D -p "$RUNTIME_DIR/haproxy.pid"
 PROXY_PID=$(cat "$RUNTIME_DIR/haproxy.pid")
 log "Forwarding 127.0.0.1${IPV6_HTTP:+ and [::1]} ports $HTTP_PORT/$HTTPS_PORT -> $HOST_IP"
-# Retain a small supervisor to stop the daemon when the command exits.
-"$@" &
-COMMAND_PID=$!
+# monitor both processes, including unexpected proxy exit
 status=0
+/usr/bin/python3 /usr/local/lib/loophole/runtime.py relay "$PROXY_PID" "$@" &
+COMMAND_PID=$!
 while :; do
     wait "$COMMAND_PID" && status=0 || status=$?
     kill -0 "$COMMAND_PID" 2>/dev/null || break
