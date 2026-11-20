@@ -12,6 +12,19 @@ services:
     #   LOOPHOLE_CA_CERT_B64: ${LOCALIAS_CA_B64:-}
     # volumes:
     #   - ${LOCALIAS_CA_PATH}:/usr/local/share/ca-certificates/localias.crt:ro
+    # Alternative: generate aliases and certificates in this container as root.
+    # Omit the external CA settings above to select managed mode.
+    # environment:
+    #   LOOPHOLE_MAP: |
+    #     "web:8000": app.test
+    #     "frontend:5173": frontend.test
+    # Or mount the same endpoint-to-domain YAML map read-only:
+    # environment:
+    #   LOOPHOLE_MAP_FILE: /config/routes.yaml
+    # volumes:
+    #   - ./routes.yaml:/config/routes.yaml:ro
+    # To persist the generated CA, also set XDG_STATE_HOME=/var/lib/loophole
+    # and mount a writable volume at /var/lib/loophole.
     ports:
       - "127.0.0.1:3000:3000"
     shm_size: 1gb

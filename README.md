@@ -66,16 +66,63 @@ docker compose up --build -d chrome
 
 See [`compose.example.yaml`](compose.example.yaml) for the optional certificate bind mount. Other services on the same network can connect to the browser server with `chromium.connect('ws://chrome:3000')` as long as your client Playwright version matches the image version. The image installs the matching npm driver and test runner at build time, so container startup does not download anything from npm.
 
-You can override the container command as usual, such as `docker run ... IMAGE node --version`. The image runs as root by default to match the upstream Playwright image, or you can pass `--user pwuser` to run as a non-root user because the HAProxy binary has the `bind-service` capability.
+You can override the container command as usual, such as `docker run ... IMAGE node --version`. The image runs as root by default to match the upstream Playwright image. Host relay mode also supports `--user pwuser` because the HAProxy binary has the `bind-service` capability. Container-managed localias requires root.
+
+### Container-managed localias
+
+Pass a YAML map of upstream endpoints to domains to generate and trust certificates entirely inside the container. This mode uses [iloveitaly/localias v3.1.0](https://github.com/iloveitaly/localias/releases/tag/v3.1.0), whose embedded Caddy connects directly to each upstream. Localias manages the container's `/etc/hosts`; no host localias, host CA export, or host domain entries are needed.
+
+The fork-specific binary downloads and architecture checksum pins in `Dockerfile` are a temporary workaround. Once the Caddy upgrade, JSON CLI output, and direct upstream support are all merged into upstream localias's master/main branch and published in a release, switch to a pinned upstream release and revisit that download block. Docker's `TARGETARCH` selects the matching binary; architecture selection itself is standard Docker behavior.
+
+```yaml
+services:
+  chrome:
+    image: ghcr.io/iloveitaly/playwright-loophole:v1.50.0-noble
+    environment:
+      LOOPHOLE_MAP: |
+        "web:8000": app.test
+        "frontend:5173": frontend.test
+    ports:
+      - "127.0.0.1:3000:3000"
+    shm_size: 1gb
+```
+
+Join `chrome` and your application services to the same Compose network. Your Playwright browser can then navigate to `https://app.test` and `https://frontend.test`. HTTP requests redirect to HTTPS. Upstream connections use HTTP; endpoints have no scheme or path. Literal IPs and bracketed IPv6 endpoints such as `"[fd00::5]:8000"` are also supported. `127.0.0.1` refers to the browser container, and host applications must still listen on an interface reachable from Docker.
+
+For a mounted configuration, put the same endpoint-to-domain mapping in `routes.yaml`:
+
+```yaml
+environment:
+  LOOPHOLE_MAP_FILE: /config/routes.yaml
+volumes:
+  - ./routes.yaml:/config/routes.yaml:ro
+```
+
+Supply only one map source. The container validates the map and writes a private localias configuration without modifying the source file. Empty or invalid maps fail startup. Domain names must be unique, including case differences. HAProxy does not start in this mode.
+
+| Configuration | Startup mode |
+| --- | --- |
+| `LOOPHOLE_ENABLED=0` | Import any supplied CA; start neither proxy. |
+| External CA through base64, an explicit path, or a file at the default CA path | Host relay; map inputs are ignored. |
+| Map supplied, no external CA | Container-managed localias. |
+| Neither map nor external CA | Host relay. |
+
+An explicitly supplied missing or invalid CA fails startup. Base64 retains precedence over the path. Managed mode uses ports 80/443 and ignores the host relay address/port overrides.
+
+Startup waits up to 30 seconds for localias and verifies TLS for every domain before launching Playwright. This generates on-demand certificates and imports the CA into the active user's NSS database; upstream applications can become available later. The main command's exit stops localias, and unexpected proxy exit stops the command with a failure.
+
+Localias state defaults to `$HOME/.local/state/localias`. To retain the generated CA across container recreation, set `XDG_STATE_HOME=/var/lib/loophole` and mount a writable volume there. Treat that volume as private: it contains the CA signing keys. Generated CA state is separate from the external CA mount path and does not change the selected mode on restart.
 
 ### Environment variables
 
 | Environment variable | Default | Purpose |
 | --- | --- | --- |
-| `LOOPHOLE_ENABLED` | `1` | Set `0` to bypass relay startup, including under host networking. |
+| `LOOPHOLE_ENABLED` | `1` | Set `0` to bypass both proxy modes, including under host networking. |
+| `LOOPHOLE_MAP` | | Inline YAML mapping upstream `host:port` endpoints to domain names; selects managed mode when no external CA is supplied. |
+| `LOOPHOLE_MAP_FILE` | | Path to a YAML map file; mutually exclusive with `LOOPHOLE_MAP`. |
 | `LOOPHOLE_TARGET_IP` | auto | Literal IPv4/IPv6 host address override. |
-| `LOOPHOLE_HTTP_PORT` | `80` | HTTP listener and target port. |
-| `LOOPHOLE_HTTPS_PORT` | `443` | HTTPS listener and target port. |
+| `LOOPHOLE_HTTP_PORT` | `80` | Host relay HTTP listener and target port. |
+| `LOOPHOLE_HTTPS_PORT` | `443` | Host relay HTTPS listener and target port. |
 | `LOOPHOLE_CA_CERT` | `/usr/local/share/ca-certificates/localias.crt` | Optional root CA to import into the current user's NSS database. |
 | `LOOPHOLE_CA_CERT_B64` | | Optional root CA PEM encoded as one line of standard base64, including the `BEGIN CERTIFICATE` and `END CERTIFICATE` lines. Overrides `LOOPHOLE_CA_CERT`. |
 | `PLAYWRIGHT_PORT` | `3000` | Default server port. Update Docker port publishing if you change it. |
@@ -102,7 +149,7 @@ For `compose.example.yaml`, set `LOCALIAS_CA_B64` to that output and uncomment t
 
 Managed policies in `/etc/chromium/policies/managed`, `/etc/opt/chrome/policies/managed`, and `/etc/opt/chrome_for_testing/policies/managed` set `QuicAllowed` to `false`, so tests do not need `--disable-quic`. Check that your chosen browser and channel load these policies; the policy test runs full Chromium (`channel: 'chromium'`) so `chrome://policy` is available. Firefox and WebKit ignore both these policies and Chromium's NSS database.
 
-During startup, the HAProxy daemon waits until its listeners are bound before returning, and any port conflict stops the container before your command runs. A small shell supervisor stops HAProxy when the main command exits and preserves the command's exit status, while `tini` reaps adopted child processes and forwards signals to the process group. HAProxy writes its runtime configuration to a private temporary directory.
+During host relay startup, the HAProxy daemon waits until its listeners are bound before returning, and any port conflict stops the container before your command runs. A Python supervisor stops the command if the proxy dies and preserves the command's exit status during normal operation. The entrypoint stops HAProxy when the command exits, while `tini` reaps adopted child processes and forwards signals. HAProxy writes its runtime configuration to a private temporary directory.
 
 ## Features
 
@@ -127,7 +174,7 @@ mise exec -- just test
 PLAYWRIGHT_VERSION=v1.64.1-noble mise exec -- just test
 ```
 
-`just test` runs the pytest suite on a Linux Docker host, and GitHub Actions uses `jdx/mise-action` to run linting, formatting checks, and the test suite. Browser tests run inside containers instead of on the host. The shipping image keeps Node and npm for the Playwright runtime, while this repository's tests run in Python.
+`just test` runs the pytest suite on a Linux Docker host, and GitHub Actions uses `jdx/mise-action` to run linting, formatting checks, and the test suite. Browser tests run inside containers instead of on the host. The shipping image uses Node and npm for Playwright and distribution-packaged Python, PyYAML, and Click for container startup. Test dependencies remain in the derived test image.
 
 The test runner builds the shipping image first and then builds a derived test image with uv-managed Python and the locked test dependencies. Inside the test image, it pins the Python Playwright client to the server's major and minor version because the Python package does not always publish every Node patch release. Resolving that version inside the test image leaves the repository's `uv.lock` untouched. Python 3.12 remains compatible with the older Playwright client releases needed when backfilling earlier upstream image tags.
 
@@ -138,6 +185,8 @@ The full suite runs once as `root` and once as `pwuser`:
 - `test/test_entrypoint.py`: bypass behavior, exit codes, malformed addresses and ports, CA import and failure handling, listener conflicts, and synchronous readiness on ports 80 and 443.
 - `test/test_relay.py`: HTTP and HTTPS connections over IPv4 and IPv6 loopback with `Host` header and TLS SNI checks.
 - `test/test_browser.py`: custom-host HTTP navigation, a nonempty PNG screenshot, expected page text, HTTPS navigation using NSS trust, and the loaded QUIC policy.
+
+An additional managed-mode suite (`test/test_managed.py`) runs as root on an isolated Docker network with two sibling HTTP services. It exercises map validation, inline/file inputs, external CA precedence, generated CA trust in Chromium, distinct upstream routing with preserved Host headers, IPv6, WebSockets, HTTP redirects, persisted state, listener conflicts, and proxy shutdown. It supplies no external CA or host localias and does not use the hosts-file test helper.
 
 `test/hosts.py` uses `python-hosts` to add `service.loophole.test` to the container's `/etc/hosts` file and remove it during cleanup, checking both steps. When testing as `pwuser`, only that hosts-file helper runs as root; pytest and the browsers run as `pwuser`. HTTPS browser tests navigate to `fixture.localhost`, which goes through Chromium's built-in localhost resolver without a hosts-file entry or ignored certificate errors. The suite requires IPv6 loopback and fails if `::1` is unavailable instead of skipping those checks.
 
